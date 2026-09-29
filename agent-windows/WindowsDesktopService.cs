@@ -117,7 +117,7 @@ internal static class WindowsDesktopService
             _ = ShowWindowAsync(handle, SwRestore);
         }
 
-        if (!SetForegroundWindow(handle))
+        if (GetForegroundWindow() != handle && !SetForegroundWindow(handle))
         {
             throw new InvalidOperationException(
                 "Windows refused to focus the selected window. Click it once manually and retry.");
@@ -472,7 +472,7 @@ internal static class WindowsDesktopService
             inputs,
             Marshal.SizeOf<NativeInput>());
 
-        if (sent != inputs.Length)
+        if (sent != (uint)inputs.Length)
         {
             throw new InvalidOperationException(
                 $"Windows accepted {sent} of {inputs.Length} input events.");
