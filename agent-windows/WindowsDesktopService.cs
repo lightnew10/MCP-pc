@@ -117,13 +117,12 @@ internal static class WindowsDesktopService
             _ = ShowWindowAsync(handle, SwRestore);
         }
 
-        if (GetForegroundWindow() != handle && !SetForegroundWindow(handle))
+        if (!TryActivateWindow(handle))
         {
             throw new InvalidOperationException(
-                "Windows refused to focus the selected window. Click it once manually and retry.");
+                "Windows refused to focus the selected window after the normal and attached-input activation attempts.");
         }
 
-        Thread.Sleep(60);
         return GetWindowInfo(handle) ?? info;
     }
 
@@ -318,26 +317,85 @@ internal static class WindowsDesktopService
 
     private static void EnsureForeground(IntPtr handle)
     {
+        if (!TryActivateWindow(handle))
+        {
+            throw new InvalidOperationException(
+                "Windows could not make the target window foreground; keyboard input was cancelled.");
+        }
+    }
+
+    private static bool TryActivateWindow(IntPtr handle)
+    {
+        if (GetForegroundWindow() == handle)
+        {
+            return true;
+        }
+
         if (IsIconic(handle))
         {
             _ = ShowWindowAsync(handle, SwRestore);
+            Thread.Sleep(80);
         }
 
-        if (GetForegroundWindow() != handle)
+        _ = BringWindowToTop(handle);
+        _ = SetForegroundWindow(handle);
+        Thread.Sleep(80);
+
+        if (GetForegroundWindow() == handle)
         {
-            if (!SetForegroundWindow(handle))
+            return true;
+        }
+
+        // Windows applies foreground-lock rules to background processes. MCP-PC runs
+        // as a background agent, so Inspector may own the foreground when a tool call
+        // arrives. Temporarily joining the relevant input queues lets Windows perform
+        // a normal foreground transition without clicking an arbitrary point.
+        var foreground = GetForegroundWindow();
+        var currentThreadId = GetCurrentThreadId();
+        var targetThreadId = GetWindowThreadProcessId(handle, out _);
+        var foregroundThreadId = foreground == IntPtr.Zero
+            ? 0
+            : GetWindowThreadProcessId(foreground, out _);
+
+        var attachedCurrentToForeground = false;
+        var attachedCurrentToTarget = false;
+
+        try
+        {
+            if (foregroundThreadId != 0 && foregroundThreadId != currentThreadId)
             {
-                throw new InvalidOperationException(
-                    "Windows refused to focus the target before keyboard input.");
+                attachedCurrentToForeground = AttachThreadInput(
+                    currentThreadId,
+                    foregroundThreadId,
+                    true);
             }
 
-            Thread.Sleep(60);
-        }
+            if (targetThreadId != 0 && targetThreadId != currentThreadId)
+            {
+                attachedCurrentToTarget = AttachThreadInput(
+                    currentThreadId,
+                    targetThreadId,
+                    true);
+            }
 
-        if (GetForegroundWindow() != handle)
+            _ = BringWindowToTop(handle);
+            _ = SetForegroundWindow(handle);
+            _ = SetFocus(handle);
+            Thread.Sleep(100);
+
+            return GetForegroundWindow() == handle;
+        }
+        finally
         {
-            throw new InvalidOperationException(
-                "The target window did not become foreground; keyboard input was cancelled.");
+            if (attachedCurrentToTarget)
+            {
+                _ = AttachThreadInput(currentThreadId, targetThreadId, false);
+            }
+
+            if (attachedCurrentToForeground)
+            {
+                _ = AttachThreadInput(currentThreadId, foregroundThreadId, false);
+            }
         }
     }
 
@@ -593,6 +651,23 @@ internal static class WindowsDesktopService
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetForegroundWindow(IntPtr handle);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool BringWindowToTop(IntPtr handle);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SetFocus(IntPtr handle);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool AttachThreadInput(
+        uint attachThreadId,
+        uint attachToThreadId,
+        [MarshalAs(UnmanagedType.Bool)] bool attach);
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetCurrentThreadId();
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
