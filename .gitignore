@@ -1,0 +1,25 @@
+# Node
+node_modules/
+gateway/dist/
+*.tsbuildinfo
+
+# .NET
+agent-windows/bin/
+agent-windows/obj/
+.vs/
+
+# Runtime data
+/data/*
+!/data/.gitkeep
+*.log
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Secrets / local config
+.env
+.env.*
+!.env.example
