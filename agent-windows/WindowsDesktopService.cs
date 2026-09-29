@@ -532,8 +532,9 @@ internal static class WindowsDesktopService
 
         if (sent != (uint)inputs.Length)
         {
+            var errorCode = Marshal.GetLastWin32Error();
             throw new InvalidOperationException(
-                $"Windows accepted {sent} of {inputs.Length} input events.");
+                $"Windows accepted {sent} of {inputs.Length} input events. Win32 error: {errorCode}.");
         }
     }
 
@@ -741,8 +742,26 @@ internal static class WindowsDesktopService
     [StructLayout(LayoutKind.Explicit)]
     private struct InputUnion
     {
+        // INPUT's native union is sized by its largest member (MOUSEINPUT).
+        // Keeping Mouse here is required even when MCP-PC only sends keyboard
+        // INPUT records through SendInput; otherwise Marshal.SizeOf<NativeInput>()
+        // is too small on x64 and SendInput fails with ERROR_INVALID_PARAMETER (87).
+        [FieldOffset(0)]
+        public MouseInput Mouse;
+
         [FieldOffset(0)]
         public KeyboardInput Keyboard;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MouseInput
+    {
+        public int X;
+        public int Y;
+        public uint MouseData;
+        public uint Flags;
+        public uint Time;
+        public UIntPtr ExtraInfo;
     }
 
     [StructLayout(LayoutKind.Sequential)]
