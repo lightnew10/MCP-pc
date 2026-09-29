@@ -103,7 +103,7 @@ async function auditedAgentCall<T>(
 
 function createServer(): McpServer {
   const server = new McpServer(
-    { name: "mcp-pc", version: "0.2.0" },
+    { name: "mcp-pc", version: "0.3.0" },
     {
       instructions:
         "Windows observation and permission-gated desktop ACTION tools. ACTION tools are window-targeted and use coordinates relative to the selected window. DANGEROUS capabilities such as shell execution, file writes, process termination, and elevation are not exposed.",
@@ -255,7 +255,7 @@ function createServer(): McpServer {
     {
       title: "Capture window",
       description:
-        "Capture the visible screen region occupied by a specific non-minimized window and return a PNG image.",
+        "Capture a specific non-minimized window and return a PNG image. The Windows agent prefers an occlusion-resistant window render and falls back to the visible screen region when needed.",
       inputSchema: z.object({
         windowId: z
           .string()
@@ -685,4 +685,4 @@ void ensurePolicy().catch((error) => {
 });
 
 void serveStdio(createServer);
-console.error("MCP-PC gateway v0.2.0 listening on stdio");
+console.error("MCP-PC gateway v0.3.0 listening on stdio");
