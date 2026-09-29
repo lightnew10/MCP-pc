@@ -18,6 +18,13 @@ internal static class AgentPolicyService
 
     private static readonly string PolicyFile = Path.Combine(DataDirectory, "policy.json");
     private static readonly string EmergencyStopFile = Path.Combine(DataDirectory, "STOP");
+    private static readonly string AuditFile = Path.Combine(DataDirectory, "audit.jsonl");
+
+    public static string DataDirectoryPath => DataDirectory;
+    public static string PolicyFilePath => PolicyFile;
+    public static string AuditFilePath => AuditFile;
+    public static string EmergencyStopFilePath => EmergencyStopFile;
+    public static bool IsEmergencyStopActive => File.Exists(EmergencyStopFile);
 
     private static readonly AgentPolicy DefaultPolicy = new(
         1,
@@ -85,6 +92,24 @@ internal static class AgentPolicyService
     }
 
     public static int GetMaxTextLength() => GetPolicy().MaxTextLength;
+
+    public static void SetEmergencyStop(bool active)
+    {
+        Directory.CreateDirectory(DataDirectory);
+
+        if (active)
+        {
+            File.WriteAllText(
+                EmergencyStopFile,
+                $"MCP-PC emergency stop enabled locally at {DateTimeOffset.UtcNow:O}{Environment.NewLine}");
+            return;
+        }
+
+        if (File.Exists(EmergencyStopFile))
+        {
+            File.Delete(EmergencyStopFile);
+        }
+    }
 }
 
 internal sealed record PermissionPolicy(bool Read, bool Action, bool Dangerous);
