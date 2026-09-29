@@ -18,6 +18,7 @@ internal static class Program
     {
         WindowsDesktopService.EnablePerMonitorDpiAwareness();
         AgentPolicyService.EnsureDefaultPolicy();
+        AgentTrayController.Start();
 
         Console.Error.WriteLine($"MCP-PC Windows agent listening on \\.\\pipe\\{PipeName}");
 
