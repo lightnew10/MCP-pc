@@ -103,9 +103,20 @@ internal static class WindowsDesktopService
         }
 
         var bounds = GetRequiredBounds(handle);
+
+        // PrintWindow asks the target application to render itself into our bitmap,
+        // so another window covering it is not normally included in the result.
+        // Some GPU/composition-heavy applications do not support PrintWindow; in
+        // that case we keep the proven CopyFromScreen path as a fallback.
+        var printed = TryCaptureWindowWithPrintWindow(handle, bounds);
+        if (printed is not null)
+        {
+            return printed;
+        }
+
         return CaptureRectangle(
             new Rectangle(bounds.X, bounds.Y, bounds.Width, bounds.Height),
-            "visible-window-region");
+            "visible-window-region-fallback");
     }
 
     public static WindowInfo FocusWindow(string windowId)
@@ -538,6 +549,42 @@ internal static class WindowsDesktopService
         }
     }
 
+    private static ScreenshotResult? TryCaptureWindowWithPrintWindow(
+        IntPtr handle,
+        WindowBounds bounds)
+    {
+        using var bitmap = new Bitmap(
+            bounds.Width,
+            bounds.Height,
+            PixelFormat.Format32bppArgb);
+
+        using (var graphics = Graphics.FromImage(bitmap))
+        {
+            var deviceContext = graphics.GetHdc();
+            try
+            {
+                if (!PrintWindow(handle, deviceContext, 0))
+                {
+                    return null;
+                }
+            }
+            finally
+            {
+                graphics.ReleaseHdc(deviceContext);
+            }
+        }
+
+        using var memory = new MemoryStream();
+        bitmap.Save(memory, ImageFormat.Png);
+
+        return new ScreenshotResult(
+            "image/png",
+            bitmap.Width,
+            bitmap.Height,
+            "window-printwindow",
+            Convert.ToBase64String(memory.ToArray()));
+    }
+
     private static ScreenshotResult CaptureRectangle(Rectangle rectangle, string captureMode)
     {
         using var bitmap = new Bitmap(rectangle.Width, rectangle.Height, PixelFormat.Format32bppArgb);
@@ -695,6 +742,10 @@ internal static class WindowsDesktopService
         uint inputCount,
         NativeInput[] inputs,
         int size);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool PrintWindow(IntPtr handle, IntPtr deviceContext, uint flags);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern short VkKeyScan(char character);
