@@ -17,6 +17,8 @@ internal static class Program
     public static async Task Main()
     {
         WindowsDesktopService.EnablePerMonitorDpiAwareness();
+        AgentPolicyService.EnsureDefaultPolicy();
+
         Console.Error.WriteLine($"MCP-PC Windows agent listening on \\.\\pipe\\{PipeName}");
 
         while (true)
@@ -83,8 +85,51 @@ internal static class Program
         {
             "windows.list" => WindowsDesktopService.ListWindows(),
             "windows.active" => WindowsDesktopService.GetActiveWindow(),
+            "windows.focus" => WindowsDesktopService.FocusWindow(
+                GetRequiredString(request.Params, "windowId")),
+
             "screen.capture" => WindowsDesktopService.CaptureScreen(),
-            "screen.captureWindow" => WindowsDesktopService.CaptureWindow(GetRequiredString(request.Params, "windowId")),
+            "screen.captureWindow" => WindowsDesktopService.CaptureWindow(
+                GetRequiredString(request.Params, "windowId")),
+
+            "cursor.position" => WindowsDesktopService.GetCursorPosition(),
+
+            "input.moveMouse" => WindowsDesktopService.MoveMouse(
+                GetRequiredString(request.Params, "windowId"),
+                GetRequiredInt(request.Params, "x"),
+                GetRequiredInt(request.Params, "y")),
+
+            "input.click" => WindowsDesktopService.Click(
+                GetRequiredString(request.Params, "windowId"),
+                GetRequiredInt(request.Params, "x"),
+                GetRequiredInt(request.Params, "y"),
+                GetRequiredString(request.Params, "button")),
+
+            "input.doubleClick" => WindowsDesktopService.DoubleClick(
+                GetRequiredString(request.Params, "windowId"),
+                GetRequiredInt(request.Params, "x"),
+                GetRequiredInt(request.Params, "y"),
+                GetRequiredString(request.Params, "button")),
+
+            "input.scroll" => WindowsDesktopService.Scroll(
+                GetRequiredString(request.Params, "windowId"),
+                GetRequiredInt(request.Params, "x"),
+                GetRequiredInt(request.Params, "y"),
+                GetRequiredInt(request.Params, "delta")),
+
+            "input.typeText" => WindowsDesktopService.TypeText(
+                GetRequiredString(request.Params, "windowId"),
+                GetRequiredString(request.Params, "text")),
+
+            "input.pressKey" => WindowsDesktopService.PressKey(
+                GetRequiredString(request.Params, "windowId"),
+                GetRequiredString(request.Params, "key")),
+
+            "input.keyCombination" => WindowsDesktopService.KeyCombination(
+                GetRequiredString(request.Params, "windowId"),
+                GetRequiredString(request.Params, "key"),
+                GetRequiredStringArray(request.Params, "modifiers")),
+
             _ => throw new InvalidOperationException($"Unknown method: {request.Method}")
         };
     }
@@ -100,6 +145,46 @@ internal static class Program
         }
 
         return value.GetString()!;
+    }
+
+    private static int GetRequiredInt(JsonElement element, string propertyName)
+    {
+        if (element.ValueKind != JsonValueKind.Object ||
+            !element.TryGetProperty(propertyName, out var value) ||
+            value.ValueKind != JsonValueKind.Number ||
+            !value.TryGetInt32(out var result))
+        {
+            throw new InvalidOperationException($"Missing or invalid integer parameter: {propertyName}");
+        }
+
+        return result;
+    }
+
+    private static IReadOnlyList<string> GetRequiredStringArray(
+        JsonElement element,
+        string propertyName)
+    {
+        if (element.ValueKind != JsonValueKind.Object ||
+            !element.TryGetProperty(propertyName, out var value) ||
+            value.ValueKind != JsonValueKind.Array)
+        {
+            throw new InvalidOperationException($"Missing or invalid array parameter: {propertyName}");
+        }
+
+        var result = new List<string>();
+        foreach (var item in value.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.String ||
+                string.IsNullOrWhiteSpace(item.GetString()))
+            {
+                throw new InvalidOperationException(
+                    $"Array parameter {propertyName} must contain only non-empty strings.");
+            }
+
+            result.Add(item.GetString()!);
+        }
+
+        return result;
     }
 }
 
